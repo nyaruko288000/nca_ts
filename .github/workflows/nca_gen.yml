@@ -1,0 +1,118 @@
+name: nca_gen (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      out:
+        description: "Output bin path (--out)"
+        required: true
+        default: "/mnt/nca_ts/data/nca_ppt_10m.bin"
+        type: string
+      meta:
+        description: "Meta json path (--meta)"
+        required: true
+        default: "/mnt/nca_ts/data/nca_ppt_10m.meta.json"
+        type: string
+
+      num_seqs:
+        description: "--num_seqs"
+        required: true
+        default: "9766"
+        type: string
+      seed:
+        description: "--seed"
+        required: true
+        default: "123"
+        type: string
+      n_colors:
+        description: "--n_colors"
+        required: true
+        default: "8"
+        type: string
+      grid:
+        description: "--grid"
+        required: true
+        default: "12"
+        type: string
+      steps_store:
+        description: "--steps_store"
+        required: true
+        default: "29"
+        type: string
+      steps_complexity:
+        description: "--steps_complexity"
+        required: true
+        default: "200"
+        type: string
+      gzip_on:
+        description: "--gzip_on (e.g. tokens)"
+        required: true
+        default: "tokens"
+        type: string
+      gzip_min:
+        description: "--gzip_min"
+        required: true
+        default: "45"
+        type: string
+      gzip_max:
+        description: "--gzip_max"
+        required: true
+        default: "55"
+        type: string
+
+jobs:
+  build_and_run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build (make -j)
+        working-directory: cpp
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Run nca_gen
+        working-directory: cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OUT="${{ inputs.out }}"
+          META="${{ inputs.meta }}"
+
+          # Create output dirs (handle absolute paths like /mnt/...)
+          for p in "$OUT" "$META"; do
+            d="$(dirname "$p")"
+            if [[ "$d" = /* ]]; then
+              sudo mkdir -p "$d"
+              sudo chown "$USER":"$USER" "$d" || true
+            else
+              mkdir -p "$d"
+            fi
+          done
+
+          ./nca_gen \
+            --out "$OUT" \
+            --meta "$META" \
+            --num_seqs "${{ inputs.num_seqs }}" \
+            --seed "${{ inputs.seed }}" \
+            --n_colors "${{ inputs.n_colors }}" \
+            --grid "${{ inputs.grid }}" \
+            --steps_store "${{ inputs.steps_store }}" \
+            --steps_complexity "${{ inputs.steps_complexity }}" \
+            --gzip_on "${{ inputs.gzip_on }}" \
+            --gzip_min "${{ inputs.gzip_min }}" \
+            --gzip_max "${{ inputs.gzip_max }}"
+
+          ls -lh "$OUT" "$META"
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: nca_gen_outputs
+          path: |
+            ${{ inputs.out }}
+            ${{ inputs.meta }}
+          if-no-files-found: error
